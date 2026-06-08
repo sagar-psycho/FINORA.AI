@@ -1,0 +1,17 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    match /profileImages/{uid}/{fileName} {
+      allow read: if signedIn();
+      allow write, delete: if isOwner(uid) && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+    }
+    match /statements/{uid}/{fileName} {
+      allow read, write, delete: if isOwner(uid);
+    }
+    match /reports/{uid}/{fileName} {
+      allow read, write, delete: if isOwner(uid);
+    }
+  }
+}

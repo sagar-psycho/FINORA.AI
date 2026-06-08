@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function superEmail() { return signedIn() && request.auth.token.email == 'kothakulasagar2002@gmail.com'; }
+    function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
+    function myDoc() { return userDoc(request.auth.uid); }
+    function isActiveApproved() { return signedIn() && (superEmail() || (myDoc().approved == true && myDoc().status == 'active')); }
+    function isAdmin() { return isActiveApproved() && (superEmail() || myDoc().role in ['admin','super_admin']); }
+    function isSuperAdmin() { return isActiveApproved() && (superEmail() || myDoc().role == 'super_admin'); }
+    function isOwner(userId) { return signedIn() && request.auth.uid == userId; }
+    function isProtectedSuperAdmin() { return resource.data.email == 'kothakulasagar2002@gmail.com'; }
+    function safeUserCreate(userId) {
+      return isOwner(userId)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['user','super_admin']
+        && (request.resource.data.email == 'kothakulasagar2002@gmail.com' || (request.resource.data.role == 'user' && request.resource.data.approved == false && request.resource.data.status == 'pending'));
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn() && (safeUserCreate(userId) || isSuperAdmin());
+      allow read: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      allow update: if isActiveApproved() && (
+        (isOwner(userId) && request.resource.data.diff(resource.data).changedKeys().hasOnly(['name','photoURL','theme','emailVerified','updatedAt','lastLoginAt']))
+        || (isAdmin() && !isProtectedSuperAdmin())
+        || isSuperAdmin()
+      );
+      allow delete: if isAdmin() && !isProtectedSuperAdmin();
+
+      match /income/{docId} {
+        allow read, write: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      }
+      match /expenses/{docId} {
+        allow read, write: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      }
+      match /budgets/{docId} {
+        allow read, write: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      }
+      match /goals/{docId} {
+        allow read, write: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      }
+      match /recurring/{docId} {
+        allow read, write: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      }
+      match /reports/{docId} {
+        allow read, write: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      }
+      match /statements/{docId} {
+        allow read, write: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      }
+      match /notifications/{docId} {
+        allow read, write: if isActiveApproved() && (isOwner(userId) || isAdmin());
+      }
+      match /approvalHistory/{docId} {
+        allow read, create: if isAdmin();
+        allow update, delete: if false;
+      }
+      match /{other=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /auditLogs/{logId} {
+      allow create: if signedIn();
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}
